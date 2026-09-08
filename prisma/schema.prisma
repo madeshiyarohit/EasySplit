@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String         @id @default(cuid())
+  phone               String?        @unique
+  email               String?        @unique
+  name                String
+  avatarUrl           String?
+  upiId               String?
+  pushToken           String?
+  notificationPrefs   Json           @default("{\"email\":true,\"push\":true,\"whatsapp\":true,\"sms\":true}")
+  createdAt           DateTime       @default(now())
+  groupMemberships    GroupMember[]
+  paidExpenses        Expense[]      @relation("PaidBy")
+  splits              ExpenseSplit[]
+  sentSettlements     Settlement[]   @relation("SettlementFrom")
+  receivedSettlements Settlement[]   @relation("SettlementTo")
+  auditLogs           AuditLog[]
+}
+
+model Group {
+  id         String        @id @default(cuid())
+  name       String
+  createdBy  String
+  inviteCode String        @unique @default(cuid())
+  createdAt  DateTime      @default(now())
+  members    GroupMember[]
+  expenses   Expense[]
+}
+
+model GroupMember {
+  groupId  String
+  userId   String
+  joinedAt DateTime @default(now())
+  group    Group    @relation(fields: [groupId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@id([groupId, userId])
+}
+
+model Expense {
+  id          String         @id @default(cuid())
+  groupId     String
+  paidById    String
+  amount      Decimal
+  description String
+  splitType   SplitType
+  category    String?
+  receiptUrl  String?
+  createdAt   DateTime       @default(now())
+  editedAt    DateTime?
+  isDeleted   Boolean        @default(false)
+  deletedBy   String?
+  group       Group          @relation(fields: [groupId], references: [id])
+  paidBy      User           @relation("PaidBy", fields: [paidById], references: [id])
+  splits      ExpenseSplit[]
+  auditLogs   AuditLog[]
+}
+
+model ExpenseSplit {
+  id         String  @id @default(cuid())
+  expenseId  String
+  userId     String
+  amountOwed Decimal
+  settled    Boolean @default(false)
+  expense    Expense @relation(fields: [expenseId], references: [id])
+  user       User    @relation(fields: [userId], references: [id])
+}
+
+model Settlement {
+  id         String   @id @default(cuid())
+  fromUserId String
+  toUserId   String
+  amount     Decimal
+  method     String // "upi" | "manual" | "cash"
+  status     String // "pending" | "confirmed"
+  createdAt  DateTime @default(now())
+  fromUser   User     @relation("SettlementFrom", fields: [fromUserId], references: [id])
+  toUser     User     @relation("SettlementTo", fields: [toUserId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  expenseId String
+  userId    String
+  action    String // "created" | "edited" | "deleted"
+  detail    String?
+  createdAt DateTime @default(now())
+  expense   Expense  @relation(fields: [expenseId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+enum SplitType {
+  EQUAL
+  UNEQUAL
+  PERCENTAGE
+  SHARES
+}
